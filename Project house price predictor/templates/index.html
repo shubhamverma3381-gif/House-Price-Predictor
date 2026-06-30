@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI House Predictor</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <style>
+        * { cursor: none; font-family: 'Poppins', sans-serif; }
+        body {
+            background: #0f172a;
+            height: 100vh; display: flex; align-items: center;
+            justify-content: center; overflow:hidden; margin: 0;
+
+        }
+        #snakeCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 9999;
+            width: 100vw;
+            height: 100vh;
+
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.05);
+            backdrop-filter: blur(15px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 20px; padding: 40px; color: white;
+            z-index: 10; text-align: center;
+            width: 450px;
+            
+        }
+    </style>
+
+</head>
+<body>
+
+    <canvas id="snakeCanvas"></canvas>
+
+    <div class="glass-card">
+        <h2>House Price <span style="color: #4ecca3;">AI</span></h2>
+        <form id="priceForm">
+            <div id="prediction" style="color: #4ecca3; font-weight: bold; text-align: center; margin-top: 15px;"></div>
+
+            <select name="location" class="form-select mb-3">
+                {% for loc in locations %}
+                <option value="{{ loc }}">{{ loc }}</option>
+                {% endfor %}
+            </select>
+            <input type="number" name="sqft" class="form-control mb-3" placeholder="Area in sqft">
+            <input type="number" name="bath" class="form-control mb-3" placeholder="Number of Bathrooms">
+            <input type="number" name="BHK" class="form-control mb-3" placeholder="BHK">
+            <button type="submit" class="btn btn-success w-100">Predict Now</button>    
+
+        </form>
+    </div>
+
+    
+
+    <script>
+        const canvas = document.getElementById('snakeCanvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+
+        const mouse = { x: canvas.width / 2, y: canvas.height / 2 };
+        const segments = [];
+        const numSegments = 60; // लंबाई बढ़ा दी ताकि खतरनाक दिखे
+        const segLength = 12; 
+
+        class Segment {
+            constructor(index) {
+                this.index = index;
+                this.x = mouse.x;
+                this.y = mouse.y;
+                this.angle = 0;
+            }
+
+            update(targetX, targetY) {
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                this.angle = Math.atan2(dy, dx);
+                this.x = targetX - Math.cos(this.angle) * segLength;
+                this.y = targetY - Math.sin(this.angle) * segLength;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(this.angle);
+                ctx.strokeStyle = '#4ecca3'; // नियॉन ग्रीन
+                ctx.lineWidth = 1.5;
+
+                // 1. रीढ़ (Spine) - फोटो की तरह बारीक हड्डियाँ
+                ctx.beginPath();
+                ctx.moveTo(0, -8);
+                ctx.lineTo(0, 8);
+                ctx.stroke();
+
+                // 2. सिर (Cabeza) - एकदम वैसा ही जैसा फोटो में है
+                if (this.index === 0) {
+                    ctx.fillStyle = '#4ecca3';
+                    ctx.beginPath();
+                    ctx.moveTo(20, 0);
+                    ctx.lineTo(-5, -12);
+                    ctx.lineTo(-5, 12);
+                    ctx.fill();
+                    // आँखें
+                    ctx.fillStyle = 'black';
+                    ctx.beginPath(); ctx.arc(5, -4, 2, 0, 7); ctx.fill();
+                    ctx.beginPath(); ctx.arc(5, 4, 2, 0, 7); ctx.fill();
+                }
+
+                // 3. असली पंख (Multi-layered Aletas) - जो आपने माँगे थे
+                if (this.index === 8 || this.index === 16 || this.index === 24) {
+                    for (let i = 0; i < 8; i++) { // 8 पंख एक साथ
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        // ऊपर का फैलाव
+                        ctx.quadraticCurveTo(-15 * i, -30 * i, -40 * i, -35 * i);
+                        ctx.stroke();
+                        // नीचे का फैलाव
+                        ctx.beginPath();
+                        ctx.moveTo(0, 0);
+                        ctx.quadraticCurveTo(-15 * i, 30 * i, -40 * i, 35 * i);
+                        ctx.stroke();
+                    }
+                }
+                ctx.restore();
+            }
+        }
+
+        for (let i = 0; i < numSegments; i++) segments.push(new Segment(i));
+
+        window.addEventListener('mousemove', (e) => {
+            mouse.x = e.clientX; mouse.y = e.clientY;
+        });
+
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            let tX = mouse.x, tY = mouse.y;
+            segments.forEach(s => {
+                s.update(tX, tY);
+                s.draw();
+                tX = s.x; tY = s.y;
+            });
+            requestAnimationFrame(animate);
+        }
+        animate();
+        document.getElementById('priceForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const formData = new FormData(e.target);
+            const response = await fetch('/predict', {
+                method: 'POST',
+                body: formData
+            });
+            const result = await response.text();
+            let price = parseFloat(result);
+            let displayPrice = (price >= 100) ? (price / 100).toFixed(2) + " Cr" : price.toFixed(2) + " Lakh";
+            document.getElementById('prediction').innerHTML = "Estimated Price: ₹" + displayPrice;
+        });
+
+    </script>
+
+</body>
+</html>
